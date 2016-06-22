@@ -1,9 +1,6 @@
-require 'fs/iso9660/util'
+require 'sys-uname'
 
-require 'binary_struct'
-require 'util/miq-unicode'
-
-module Iso9660
+module VirtFS::ISO9660
   class BootSector
     # Universal Volume Descriptor ID.
     DESCRIPTOR_ID = "CD001"

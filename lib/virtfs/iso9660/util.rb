@@ -1,10 +1,6 @@
-# encoding: US-ASCII
-
-require 'ostruct'
-
 require 'binary_struct'
 
-module Iso9660
+module VirtFS::ISO9660
   module Util
     ISO_DATE = BinaryStruct.new([
       'a4', 'year',   # Absolute year.
@@ -53,5 +49,5 @@ module Iso9660
     def self.GetShortTimezone(isoShort)
       isoShort[7] / 4
     end
-  end
-end
+  end # module Util
+end # module VirtFS::ISO9660

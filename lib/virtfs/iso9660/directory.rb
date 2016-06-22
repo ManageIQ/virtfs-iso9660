@@ -1,7 +1,4 @@
-require 'fs/iso9660/directory_entry'
-require 'binary_struct'
-
-module Iso9660
+module VirtFS::ISO9660
   class Directory
     # Find entry flags.
     FE_DIR = 0
