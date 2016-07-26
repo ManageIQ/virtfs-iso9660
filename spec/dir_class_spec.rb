@@ -4,12 +4,8 @@ describe "ISO9660::Dir class methods" do
   before(:all) do
     reset_context
 
-    @full_path = File.expand_path(__FILE__)
-    @rel_path  = File.basename(@full_path)
-    @spec_dir  = File.dirname(@full_path)
-    @root      = File::SEPARATOR
-
-    @iso = build(:iso)
+    @root = File::SEPARATOR
+    @iso  = build(:iso)
     VirtFS.mount(@iso.fs, @root)
   end
 
