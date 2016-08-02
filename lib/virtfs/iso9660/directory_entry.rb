@@ -21,6 +21,22 @@ module VirtFS::ISO9660
       @date ||= Util.IsoShortToRubyDate(de['date'])
     end
 
+    alias :atime :date
+    alias :ctime :date
+    alias :mtime :date
+
+    def chmod(mode)
+      raise "writes not supported"
+    end
+
+    def chown(owner, group)
+      raise "writes not supported"
+    end
+
+    def truncate(len)
+      raise "writes not supported"
+    end
+
     def name_len
       @name_len ||= de['name_len']
     end
