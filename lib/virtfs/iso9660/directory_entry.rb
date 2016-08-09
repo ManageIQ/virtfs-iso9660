@@ -1,25 +1,4 @@
-require 'fs/iso9660/util'
-require 'fs/iso9660/rock_ridge'
-
-require 'binary_struct'
-require 'util/miq-unicode'
-
-module Iso9660
-  # FlagBits: FB_
-  FB_HIDDEN     = 0x01  # 0 if not hidden.
-  FB_DIRECTORY  = 0x02  # 0 if file.
-  FB_ASSOCIATED = 0x04  # 0 if not 'associated' (?)
-  FB_RFS        = 0x08  # RecordFormatSpecified: 0 if not.
-  FB_PS         = 0x10  # PermissionsSpecified: 0 if not.
-  FB_UNUSED1    = 0x20  # No info.
-  FB_UNUSED2    = 0x40  # No info.
-  FB_NOT_LAST   = 0x80  # 0 if last entry.
-
-  # Extensions.
-  EXT_NONE      = 0
-  EXT_JOLIET    = 1
-  EXT_ROCKRIDGE = 2
-
+module VirtFS::ISO9660
   class DirectoryEntry
     DIR_ENT = BinaryStruct.new([
       'C',  'length',           # Bytes, must be even.
@@ -143,5 +122,5 @@ module Iso9660
       end
       out
     end
-  end # class
-end # module
+  end # class DirectoryEntry
+end # module VirtFS::ISO9660
