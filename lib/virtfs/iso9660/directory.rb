@@ -1,87 +1,65 @@
 module VirtFS::ISO9660
   class Directory
-    # Find entry flags.
-    FE_DIR = 0
-    FE_FILE = 1
-    FE_EITHER = 2
+    attr_accessor :bs, :dir_entry
 
-    # System Use Sharing Protocol header (for Rock Ridge in this implementation).
-    SUSP = BinaryStruct.new([
-      'a2', 'signature',
-      'C',  'len',
-      'C',  'version',
-      'n',  'check',
-      'C',  'skip_bytes'
-    ])
-    SUSP_SIGNATURE  = "SP"
-    SUSP_SIZE       = 7
-    SUSP_VERSION    = 1
-    SUSP_CHECK_WORD = 0xbeef
+    def initialize(bs, dir_entry)
+      raise "Boot sector is nil"                  if bs.nil?
+      raise "No directory entry specified"        if dir_entry.nil?
+      raise "Given entry is not a DirectoryEntry" unless dir_entry.is_a?(VirtFS::ISO9660::DirectoryEntry)
 
-    attr_reader :myEnt, :susp
+      self.bs        = bs
+      self.dir_entry = dir_entry
 
-    def initialize(bs, thisEntry)
-      raise "Boot sector is nil." if bs.nil?
-      raise "No directory entry specified." if thisEntry.nil?
-      raise "Given entry is not a DirectoryEntry" if thisEntry.class.to_s != "Iso9660::DirectoryEntry"
-
-      @bs = bs
-      @myEnt = thisEntry
-      @data = getDirData
-
-      # Check for RockRidge extensions.
-      @susp = checkRockRidge(DirectoryEntry.new(@data, @bs.suff))
+      extract_rock_ridge(DirectoryEntry.new(dir_data, @bs.suffix))
     end
 
-    def getDirData
-      @bs.getSectors(@myEnt.fileStart, @myEnt.fileSize / @bs.sectorSize)
+    def dir_data
+      @dir_data ||= bs.sectors(dir_entry.file_start, dir_entry.file_size / bs.sector_size)
     end
 
-    def globNames
-      names = []
-      globEntries.each { |de| names << de.name }
-      names
+    def glob_names
+      @glob_names ||= glob_entries.collect { |de| de.name }
     end
 
-    def findEntry(name, _flags = FE_EITHER)
+    def find_entry(name, _flags = FE_EITHER)
       # TODO: enable flags
-      globEntries.each do |de|
-        return de if de.name == name        # Joliet & RR are case sensitive.
-        return de if de.name == name.upcase # ISO 9660 is ucase only.
-      end
-      nil
+      # Joliet & RR are case sensitive
+      # ISO 9660 is ucase only.
+      glob_entries.find { |de| [name, name.upcase].include?(de.name) }
     end
 
-    def globEntries
-      # Prep flag bits.
-      flags = EXT_NONE
-      flags |= EXT_JOLIET if @bs.isJoliet?
-      flags |= EXT_ROCKRIDGE if @susp
+    def entries_flags
+      @entries_flags ||= begin
+        flags  = EXT_NONE
+        flags |= EXT_JOLIET    if bs.joliet?
+        flags |= EXT_ROCKRIDGE if rock_ridge?
+        flags
+      end
+    end
 
-      # Glob entries.
+    def glob_entries
+      offset  = 0
       entries = []
-      offset = 0
       loop do
-        de = DirectoryEntry.new(@data[offset..-1], @bs.suff, flags)
+        de = DirectoryEntry.new(dir_data[offset..-1], bs.suffix, entries_flags)
         break if de.length == 0
         entries << de
-        # Debugging only.
-        # puts "#{de.dump}\n"
         offset += de.length
       end
       entries
     end
 
-    def checkRockRidge(de)
-      if de.sua
-        susp = SUSP.decode(de.sua)
-        return nil if susp['signature'] != SUSP_SIGNATURE
-        return nil if susp['len'] != SUSP_SIZE
-        return nil if susp['check'] != SUSP_CHECK_WORD
-        raise "System Use Sharing Protocol version mismatch" if susp['version'] != SUSP_VERSION
-        return susp
-      end
-      nil
+    def rock_ridge?
+      !@susp.nil?
     end
-  end # class
-end # module
+
+    def extract_rock_ridge(de)
+      return nil unless de.sua
+      @susp = SUSP.decode(de.sua)
+      return nil                                           if @susp['signature'] != SUSP_SIGNATURE
+      return nil                                           if @susp['len']       != SUSP_SIZE
+      return nil                                           if @susp['check']     != SUSP_CHECK_WORD
+      raise "System Use Sharing Protocol version mismatch" if @susp['version']   != SUSP_VERSION
+    end
+  end # class Directory
+end # module VirtFS::ISO9660

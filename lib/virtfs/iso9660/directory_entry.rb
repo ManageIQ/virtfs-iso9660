@@ -1,90 +1,134 @@
 module VirtFS::ISO9660
   class DirectoryEntry
-    DIR_ENT = BinaryStruct.new([
-      'C',  'length',           # Bytes, must be even.
-      'C',  'ext_attr_length',  # Sectors.
-      'L',  'extentLE',         # First sector of data.
-      'L',  'extentBE',
-      'L',  'sizeLE',           # Size of data in bytes.
-      'L',  'sizeBE',
-      'a7', 'date',             # ISODATE
-      'C',  'flags',            # Flags, see FB_ above.
-      'C',  'file_unit_size',   # For interleaved files: not supported.
-      'C',  'interleave',       # Not supported.
-      'S',  'vol_seq_numLE',    # Not used.
-      'S',  'vol_seq_numBE',
-      'C',  'name_len',         # Bytes.
-    ])
-    # Here follows a name. Character set is limited ASCII.
-    # Here follows an optional padding byte (if name_len is even).
-    # Here follows unspecified extra data, size is included in member length.
-    SIZEOF_DIR_ENT = DIR_ENT.size
+    attr_accessor :data, :suffix, :flags
 
-    attr_reader :date, :length, :myEnt
+    def de
+      @de ||= DIR_ENT.decode(data)
+    end
 
-    def initialize(data, suff, flags = EXT_NONE)
-      raise "Data is nil." if data.nil?
+    def length
+      @length ||= de['length']
+    end
 
-      @suff = suff
-      # Get data.
-      @de = DIR_ENT.decode(data)
-      @length = @de['length']
-      @myEnt = data[0...@length]
-      @date = Util.IsoShortToRubyDate(@de['date'])
-      offset = SIZEOF_DIR_ENT
-      len = @de['name_len']
-      if len > 0
-        name = data[offset...(offset + len)]
-        # Convert 00 to dot and 01 to dotdot.
-        if len == 1 && (name[0] == 0 || name[0] == 1)
-          name = "." if name[0] == 0
-          name = ".." if name[0] == 1
-        else
-          name.Ucs2ToAscii! if flags & EXT_JOLIET == EXT_JOLIET
-        end
-        offset += len
-        offset += 1 if len & 1 == 0 && (flags & EXT_JOLIET == 0) # Cheap test for even/odd.
-      end
-      @de['name'] = name
-      @de['sua'] = data[offset...@de['length'] - 1] if offset < @de['length']
-      processRockRidge if flags & EXT_ROCKRIDGE == EXT_ROCKRIDGE
+    def entry
+      @entry ||= data[0...length]
+    end
+
+    def date
+      @date ||= Util.IsoShortToRubyDate(de['date'])
+    end
+
+    def name_len
+      @name_len ||= de['name_len']
+    end
+
+    def file_start
+      @file_start ||= de["extent#{suffix}"]
+    end
+
+    def name_offset
+      @name_offset ||= SIZEOF_DIR_ENT
+    end
+
+    def has_name?
+      name_len > 0
+    end
+
+    def name_data
+      data[name_offset...(name_offset + name_len)]
     end
 
     def name
-      @de['name']
+      @name ||= convert_name(name_data) if has_name?
+    end
+
+    def is_single_dot(name)
+      name[0] == 0
+    end
+
+    def is_double_dot(name)
+      name[0] == 1
+    end
+
+    def is_dot(name)
+      is_single_dot(name) || is_double_dot(name)
+    end
+
+    def convert_name(name)
+      if name_len == 1 && is_dot(name)
+        return "."  if is_single_dot(name)
+        return ".." if is_double_dot(name)
+
+      elsif joliet?
+        return name.Ucs2ToAscii
+      end
+
+      name
+    end
+
+    def sua_offset
+      @sua_offset ||= name_offset + name_len + (even? ? 1 : 0)
+    end
+
+    def sua_data
+      data[sua_offset...length-1]
+    end
+
+    def has_sua?
+      sua_offset < length
     end
 
     def sua
-      @de['sua']
+      @sua ||= sua_data if has_sua?
     end
 
-    def fileStart
-      @de["extent#{@suff}"]
+    def file?
+      de['flags'] & FB_DIRECTORY == 0
     end
 
-    def fileSize
-      return @de["size#{@suff}"] if @rr.nil?
-      size = checkExt("linkData")
-      return size.size unless size.nil?
-      @de["size#{@suff}"]
+    def dir?
+      de['flags'] & FB_DIRECTORY == FB_DIRECTORY
     end
 
-    def isFile?
-      @de['flags'] & FB_DIRECTORY == 0
+    def joliet?
+      (flags & EXT_JOLIET) == EXT_JOLIET
     end
 
-    def isDir?
-      @de['flags'] & FB_DIRECTORY == FB_DIRECTORY
+    def rock_ridge?
+      (flags & EXT_ROCKRIDGE) == EXT_ROCKRIDGE
     end
 
-    def isSymLink?
-      return false if @rr.nil?
-      isLink = checkExt("linkData")
-      return true unless isLink.nil?
-      false
+    def even?
+      name_len & 1 == 0 && !joliet? # Cheap test for even/odd.
     end
 
-    def checkExt(sym)
+    def initialize(data, suffix, flags = EXT_NONE)
+      raise "data is nil" if data.nil?
+      self.data   = data
+      self.suffix = suffix
+      self.flags  = flags
+
+      #process_rock_ridge if rock_ridge?
+    end
+
+    def file_size
+      @rr.nil? ? de["size#{suffix}"] : rock_ridge_file_size
+    end
+
+    def rock_ridge_file_size
+      size = rock_ridge_ext("linkData")
+      size.nil? ? de["size#{suffix}"] : size.size
+    end
+
+    def symlink?
+      @rr.nil? ? false : has_rock_ridge_extension?("linkData")
+    end
+
+    def has_rock_ridge_extension?(ext)
+      !rock_ridge_ext(ext).nil?
+    end
+
+    def rock_ridge_ext(sym)
       return nil if @rr.nil?
       res = nil
       @rr.extensions.each do |extension|
@@ -98,29 +142,12 @@ module VirtFS::ISO9660
       res
     end
 
-    def processRockRidge
+    def process_rock_ridge
       return if length == 0
-      @rr = RockRidge.new(self)
-      # Check for alternate name.
-      new_name = checkExt("name")
-      @de['name'] = new_name unless new_name.nil?
-    end
+      @rr = RockRidgeAdapter.new(self, suffix)
 
-    def dump
-      out = ""
-      out << "Length  : #{@de['length']}\n"
-      out << "Attr len: #{@de['ext_attr_length']} (sectors)\n"
-      out << "Data sec: #{@de["extent#{@suff}"]}\n"
-      out << "Size    : #{@de["size#{@suff}"]}\n"
-      out << "Date    : #{@date}\n"
-      out << "Flags   : 0x#{'%02x' % @de['flags']}\n"
-      out << "Name len: #{@de['name_len']}\n"
-      out << "Name    : #{@de['name']}\n"
-      if @de['sua']
-        out << "System U:\n"
-        out << @de['sua'].hex_dump
-      end
-      out
+      # Check for alternate name.
+      @name = rock_ridge_ext("name") if has_rock_ridge_ext?("name")
     end
   end # class DirectoryEntry
 end # module VirtFS::ISO9660
