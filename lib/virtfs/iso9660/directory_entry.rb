@@ -1,6 +1,9 @@
 module VirtFS::ISO9660
   class DirectoryEntry
-    attr_accessor :data, :suffix, :flags
+    attr_accessor :data, :suffix, :fs, :flags
+
+    def close
+    end
 
     def de
       @de ||= DIR_ENT.decode(data)
@@ -43,11 +46,11 @@ module VirtFS::ISO9660
     end
 
     def is_single_dot(name)
-      name[0] == 0
+      name[0].ord == 0
     end
 
     def is_double_dot(name)
-      name[0] == 1
+      name[0].ord == 1
     end
 
     def is_dot(name)
@@ -102,10 +105,11 @@ module VirtFS::ISO9660
       name_len & 1 == 0 && !joliet? # Cheap test for even/odd.
     end
 
-    def initialize(data, suffix, flags = EXT_NONE)
+    def initialize(data, suffix, fs, flags = EXT_NONE)
       raise "data is nil" if data.nil?
       self.data   = data
       self.suffix = suffix
+      self.fs     = fs
       self.flags  = flags
 
       #process_rock_ridge if rock_ridge?
@@ -114,6 +118,8 @@ module VirtFS::ISO9660
     def file_size
       @rr.nil? ? de["size#{suffix}"] : rock_ridge_file_size
     end
+
+    alias :size :file_size
 
     def rock_ridge_file_size
       size = rock_ridge_ext("linkData")
