@@ -1,16 +1,20 @@
 module VirtFS::ISO9660
   class Directory
-    attr_accessor :bs, :dir_entry
+    attr_accessor :fs, :bs, :dir_entry
 
-    def initialize(bs, dir_entry)
+    def initialize(bs, dir_entry, fs)
       raise "Boot sector is nil"                  if bs.nil?
       raise "No directory entry specified"        if dir_entry.nil?
       raise "Given entry is not a DirectoryEntry" unless dir_entry.is_a?(VirtFS::ISO9660::DirectoryEntry)
 
       self.bs        = bs
       self.dir_entry = dir_entry
+      self.fs        = fs
 
-      extract_rock_ridge(DirectoryEntry.new(dir_data, @bs.suffix))
+      extract_rock_ridge(DirectoryEntry.new(dir_data, @bs.suffix, fs))
+    end
+
+    def close
     end
 
     def dir_data
@@ -41,7 +45,7 @@ module VirtFS::ISO9660
       offset  = 0
       entries = []
       loop do
-        de = DirectoryEntry.new(dir_data[offset..-1], bs.suffix, entries_flags)
+        de = DirectoryEntry.new(dir_data[offset..-1], bs.suffix, fs, entries_flags)
         break if de.length == 0
         entries << de
         offset += de.length
