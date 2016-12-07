@@ -134,6 +134,7 @@ module VirtFS::ISO9660
     end
 
     def file_truncate(p, len)
+      raise "writes not supported"
     end
 
     def file_utime(atime, mtime, p)

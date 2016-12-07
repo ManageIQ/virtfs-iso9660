@@ -17,6 +17,10 @@ module VirtFS::ISO9660
     def close
     end
 
+    def read(pos)
+      return cache[pos], pos + 1
+    end
+
     def dir_data
       @dir_data ||= bs.sectors(dir_entry.file_start, dir_entry.file_size / bs.sector_size)
     end
@@ -64,6 +68,12 @@ module VirtFS::ISO9660
       return nil                                           if @susp['len']       != SUSP_SIZE
       return nil                                           if @susp['check']     != SUSP_CHECK_WORD
       raise "System Use Sharing Protocol version mismatch" if @susp['version']   != SUSP_VERSION
+    end
+
+    private
+
+    def cache
+      @cache ||= glob_entries.to_a
     end
   end # class Directory
 end # module VirtFS::ISO9660
