@@ -2,7 +2,7 @@ require 'ostruct'
 require 'virtfs/block_io'
 require 'virt_disk/block_file'
 
-FactoryGirl.define do
+FactoryBot.define do
   factory :iso, class: OpenStruct do
     path '/var/lib/oz/isos/Fedora22x86_64-url.iso'
     fs { VirtFS::ISO9660::FS.new(VirtFS::BlockIO.new(VirtDisk::BlockFile.new(path))) }
